@@ -1,0 +1,179 @@
+USE Portefolio_Project_1; 
+
+-- COVID DEATHS 
+
+
+SELECT * 
+FROM CovidDeaths
+ORDER BY 3,4; 
+
+--SELECT * 
+--FROM CovidVaccinations
+--ORDER BY 3,4; 
+
+--Select data that we will be using.
+
+SELECT location, date, total_cases, new_cases, total_deaths, population
+FROM CovidDeaths
+ORDER BY 1,2; 
+
+--Looking at total cases vs total deaths
+--	Likelihood of dying from contracting COVID-19
+
+SELECT location, date, total_cases, total_deaths, ROUND((total_deaths / total_cases) * 100, 2) AS DeathPercentage
+FROM CovidDeaths
+WHERE location = 'Portugal' and continent is not null
+ORDER BY 1,2; 
+
+SELECT location, date, total_cases, total_deaths, ROUND((total_deaths / total_cases) * 100, 2) AS DeathPercentage
+FROM CovidDeaths
+WHERE location like '%states%'
+ORDER BY 1,2; 
+
+-- Total cases vs Population
+
+SELECT location, date, total_cases, population, (total_cases/population) * 100 AS CasesPercentage
+FROM CovidDeaths
+
+ORDER BY 1,2; 
+
+--Looking at countries with highest infection rates compared to population
+
+SELECT Location, population, MAX(total_cases) as highest_infection_count, MAX((total_cases/population)) * 100 AS PercentPopInfected
+FROM CovidDeaths
+Where continent is not null
+GROUP BY location, population
+ORDER BY 4 DESC; 
+
+
+-- The Portuguese case
+
+SELECT Location, population, MAX(total_cases) as highest_infection_count, MAX((total_cases/population)) * 100 AS PercentPopInfected
+FROM CovidDeaths
+Where continent is not null and location = 'Portugal'
+GROUP BY location, population
+ORDER BY 4 DESC; 
+
+-- Comparing Portugal vs France
+
+SELECT Location, population, MAX(total_cases) as highest_infection_count, MAX((total_cases/population)) * 100 AS PercentPopInfected
+FROM CovidDeaths
+Where continent is not null and location in ('Portugal','France')
+GROUP BY location, population
+ORDER BY 4 DESC; 
+
+
+--Countries with highest death count per population
+
+SELECT Location, MAX(cast(total_deaths as int)) as Total_death_count
+FROM CovidDeaths
+Where continent is not null
+GROUP BY location
+ORDER BY Total_death_count DESC; 
+
+
+--Percentage of Population infected and Death count per continent 
+
+SELECT continent, MAX((total_cases/population)) * 100 AS PercentPopInfected, MAX(cast(total_deaths as int)) as Total_death_count
+FROM CovidDeaths
+Where continent is not null
+GROUP BY continent
+ORDER BY Total_death_count DESC; 
+
+--Continents with higher death count per population
+
+SELECT continent, MAX((total_cases/population)) * 100 AS PercentPopInfected, MAX(cast(total_deaths as int)) as Total_death_count
+FROM CovidDeaths
+Where continent is not null
+GROUP BY continent
+ORDER BY Total_death_count DESC; 
+
+--Global numbers
+
+SELECT SUM(new_cases) as world_total_cases, SUM(cast(new_deaths as int)) as world_total_deaths, SUM(cast(new_deaths as int))/SUM(new_cases) * 100 as death_percentage_worldwide
+FROM CovidDeaths
+WHERE continent is not null
+ORDER BY 1,2;
+
+-- VACCINATION --
+
+SELECT * 
+FROM CovidDeaths; 
+
+SELECT * 
+FROM CovidVaccinations; 
+
+-- Total Population vs Vaccinations
+-- Percentage of Population that has recieved at least one Covid Vaccine
+
+Select dea.continent, dea.location, dea.date, dea.population, vac.new_vaccinations
+, SUM(CONVERT(int,vac.new_vaccinations)) OVER (Partition by dea.Location Order by dea.location, dea.Date) as RollingPeopleVaccinated
+--, (RollingPeopleVaccinated/population)*100
+From CovidDeaths dea
+Join CovidVaccinations vac
+	On dea.location = vac.location
+	and dea.date = vac.date
+where dea.continent is not null 
+order by 2,3
+
+-- CTE
+
+	-- Calculating the rolling sum of new vaccinations for each location and date;
+		-- and then calculating the percentage of the population that has been vaccinated up to that date.
+
+With PopvsVac (Continent, Location, Date, Population, New_Vaccinations, RollingPeopleVaccinated)
+as
+(
+Select dea.continent, dea.location, dea.date, dea.population, vac.new_vaccinations
+, SUM(CONVERT(int,vac.new_vaccinations)) OVER (Partition by dea.Location Order by dea.location, dea.Date) as RollingPeopleVaccinated
+--, (RollingPeopleVaccinated/population)*100
+From CovidDeaths dea
+Join CovidVaccinations vac
+	On dea.location = vac.location
+	and dea.date = vac.date
+where dea.continent is not null 
+--order by 2,3
+)
+Select *, (RollingPeopleVaccinated/Population)*100
+From PopvsVac;
+
+-- Using Temp Table to perform Calculation on Partition By in previous query
+
+DROP Table if exists #PercentPopulationVaccinated
+Create Table #PercentPopulationVaccinated
+(
+Continent nvarchar(255),
+Location nvarchar(255),
+Date datetime,
+Population numeric,
+New_vaccinations numeric,
+RollingPeopleVaccinated numeric
+)
+
+-- inserting data on temporary table
+
+Insert into PercentPopulationVaccinated
+Select dea.continent, dea.location, dea.date, dea.population, vac.new_vaccinations
+, SUM(CONVERT(int,vac.new_vaccinations)) OVER (Partition by dea.Location Order by dea.location, dea.Date) as RollingPeopleVaccinated
+--, (RollingPeopleVaccinated/population)*100
+From CovidDeaths dea
+Join CovidVaccinations vac
+	On dea.location = vac.location
+	and dea.date = vac.date
+--where dea.continent is not null 
+--order by 2,3;
+
+Select *, (RollingPeopleVaccinated/Population)*100
+From PercentPopulationVaccinated
+
+-- Creating view for later visualization
+
+Create View PercentPopulationVaccinated2 as
+Select dea.continent, dea.location, dea.date, dea.population, vac.new_vaccinations
+, SUM(CONVERT(int,vac.new_vaccinations)) OVER (Partition by dea.Location Order by dea.location, dea.Date) as RollingPeopleVaccinated
+--, (RollingPeopleVaccinated/population)*100
+From CovidDeaths dea
+Join CovidVaccinations vac
+	On dea.location = vac.location
+	and dea.date = vac.date
+where dea.continent is not null 
